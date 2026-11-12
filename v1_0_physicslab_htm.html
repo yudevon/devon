@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作用力與反作用力互動物理實驗室 - Newton's Third Law</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        canvas {
+            touch-action: none;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 md:p-4 bg-slate-950 text-slate-100">
+
+    <!-- Header Section -->
+    <header class="max-w-7xl w-full mx-auto mb-4 bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="p-3 bg-indigo-600/20 border border-indigo-500/30 rounded-xl text-indigo-400">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                    作用力與反作用力 物理互動實驗室
+                </h1>
+                <p class="text-xs text-slate-400">牛頓第三運動定律（Newton's Third Law of Motion）即時數值模擬</p>
+            </div>
+        </div>
+        
+        <!-- Mode Switcher -->
+        <div class="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 w-full md:w-auto overflow-x-auto">
+            <button id="mode-push" onclick="setMode('push')" class="px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 whitespace-nowrap">
+                1. 推擠/相互作用力
+            </button>
+            <button id="mode-spring" onclick="setMode('spring')" class="px-4 py-2 text-xs md:text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 transition-all duration-200 whitespace-nowrap">
+                2. 彈簧連接彈射
+            </button>
+            <button id="mode-collide" onclick="setMode('collide')" class="px-4 py-2 text-xs md:text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 transition-all duration-200 whitespace-nowrap">
+                3. 雙物體碰撞
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow">
+        
+        <!-- Left / Top: Interactive Simulation Area (8 cols) -->
+        <section class="lg:col-span-8 flex flex-col gap-4">
+            <!-- Canvas Container -->
+            <div class="relative bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex-grow min-h-[380px] md:min-h-[460px] flex flex-col">
+                <!-- Overlay Canvas Header / Controls Overlay -->
+                <div class="absolute top-3 left-3 right-3 flex justify-between items-center z-10 pointer-events-none">
+                    <div class="bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono text-cyan-400 flex items-center gap-2 pointer-events-auto">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="status-text">系統運行中 (Euler 積分 dt=0.016s)</span>
+                    </div>
+                    <div class="flex gap-2 pointer-events-auto">
+                        <button id="btn-pause" onclick="togglePause()" class="bg-slate-800/90 hover:bg-slate-700 text-slate-200 p-2 rounded-lg border border-slate-700 text-xs font-semibold transition flex items-center gap-1 shadow">
+                            <span id="pause-icon">⏸️</span> <span id="pause-text">暫停</span>
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-800/90 hover:bg-slate-700 text-slate-200 p-2 rounded-lg border border-slate-700 text-xs font-semibold transition flex items-center gap-1 shadow">
+                            🔄 重置
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Canvas -->
+                <canvas id="simCanvas" class="w-full h-full block flex-grow cursor-crosshair"></canvas>
+
+                <!-- Vector Legend Floating Box -->
+                <div class="absolute bottom-3 left-3 bg-slate-950/85 backdrop-blur border border-slate-800 rounded-lg p-2.5 text-xs flex gap-4 text-slate-300 pointer-events-none">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-red-500 rounded-full inline-block"></span>
+                        <span>作用力 $\vec{F}_A$</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-blue-500 rounded-full inline-block"></span>
+                        <span>反作用力 $\vec{F}_B$</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-emerald-400 rounded-full inline-block"></span>
+                        <span>速度向量 $\vec{v}$</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Realtime Telemetry Panel -->
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
+                <div class="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">物體 A 受力 ($F_A$)</div>
+                    <div id="telemetry-fa" class="text-base sm:text-lg font-bold text-red-400 font-mono mt-0.5">0.0 N</div>
+                </div>
+                <div class="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">物體 B 受力 ($F_B$)</div>
+                    <div id="telemetry-fb" class="text-base sm:text-lg font-bold text-blue-400 font-mono mt-0.5">0.0 N</div>
+                </div>
+                <div class="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">速度 A ($v_A$)</div>
+                    <div id="telemetry-va" class="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5">0.00 m/s</div>
+                </div>
+                <div class="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">速度 B ($v_B$)</div>
+                    <div id="telemetry-vb" class="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5">0.00 m/s</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1 bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[10px] uppercase tracking-wider text-amber-400/90 font-semibold">總動量 ($P_{total}$)</div>
+                    <div id="telemetry-ptotal" class="text-base sm:text-lg font-bold text-amber-400 font-mono mt-0.5">0.00 kg·m/s</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right: Control Panel & Educational Info (4 cols) -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Parameters Controller Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col gap-4">
+                <h2 class="text-base font-bold text-slate-200 flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                    </svg>
+                    物理參數設定
+                </h2>
+
+                <!-- Action Button Trigger -->
+                <div class="p-3 bg-indigo-950/30 border border-indigo-800/50 rounded-xl">
+                    <label id="action-label" class="block text-xs font-semibold text-indigo-300 mb-2">主動操作觸發器</label>
+                    <button id="btn-action" onclick="triggerAction()" class="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-500/25 active:scale-95 transition-all">
+                        🚀 觸發相互推力 (FA = -FB)
+                    </button>
+                </div>
+
+                <!-- Sliders Grid -->
+                <div class="space-y-3 text-xs">
+                    <!-- Mass A -->
+                    <div>
+                        <div class="flex justify-between font-medium mb-1">
+                            <span class="text-red-400 font-semibold">物體 A 質量 ($m_A$)</span>
+                            <span id="val-ma" class="font-mono text-slate-300">2.0 kg</span>
+                        </div>
+                        <input type="range" id="slider-ma" min="0.5" max="10" step="0.1" value="2.0" oninput="updateParams()" class="w-full accent-red-500 bg-slate-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <!-- Mass B -->
+                    <div>
+                        <div class="flex justify-between font-medium mb-1">
+                            <span class="text-blue-400 font-semibold">物體 B 質量 ($m_B$)</span>
+                            <span id="val-mb" class="font-mono text-slate-300">5.0 kg</span>
+                        </div>
+                        <input type="range" id="slider-mb" min="0.5" max="10" step="0.1" value="5.0" oninput="updateParams()" class="w-full accent-blue-500 bg-slate-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <!-- Dynamic Parameter: Force / Stiffness / Velocity -->
+                    <div id="dynamic-param-box">
+                        <div class="flex justify-between font-medium mb-1">
+                            <span id="lbl-dynamic-param" class="text-indigo-300 font-semibold">相互作用推力 ($F_{push}$)</span>
+                            <span id="val-dynamic-param" class="font-mono text-slate-300">100 N</span>
+                        </div>
+                        <input type="range" id="slider-dynamic-param" min="10" max="300" step="5" value="100" oninput="updateParams()" class="w-full accent-indigo-500 bg-slate-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <!-- Friction Coefficient -->
+                    <div>
+                        <div class="flex justify-between font-medium mb-1">
+                            <span class="text-slate-300 font-semibold">地面摩擦係數 ($\mu$)</span>
+                            <span id="val-friction" class="font-mono text-slate-300">0.05</span>
+                        </div>
+                        <input type="range" id="slider-friction" min="0.00" max="0.30" step="0.01" value="0.05" oninput="updateParams()" class="w-full accent-slate-500 bg-slate-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <!-- Restitution / Elasticity Coefficient -->
+                    <div id="restitution-box">
+                        <div class="flex justify-between font-medium mb-1">
+                            <span class="text-slate-300 font-semibold">碰撞恢復係數 ($e$)</span>
+                            <span id="val-restitution" class="font-mono text-slate-300">0.90</span>
+                        </div>
+                        <input type="range" id="slider-restitution" min="0.0" max="1.0" step="0.05" value="0.90" oninput="updateParams()" class="w-full accent-emerald-500 bg-slate-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Physics Concepts Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex-grow text-xs leading-relaxed space-y-2">
+                <h3 class="font-bold text-indigo-400 text-sm flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    牛頓第三運動定律要點
+                </h3>
+                <ul class="list-disc pl-4 space-y-1.5 text-slate-300">
+                    <li><strong class="text-amber-300">大小相等、方向相反：</strong> $\vec{F}_{A \to B} = -\vec{F}_{B \to A}$。無論質量大小差異多大，兩者受到的作用力絕對相等。</li>
+                    <li><strong class="text-amber-300">作用於不同物體：</strong> 作用力與反作用力不能抵消，因為分別作用在物體 A 與物體 B 上。</li>
+                    <li><strong class="text-amber-300">加速度差異：</strong> 由 $a = F/m$ 可知，質量較小的物體會獲得較大的加速度。</li>
+                    <li><strong class="text-amber-300">動量守恆：</strong> 系統無外力時，總動量 $P_{total} = m_A v_A + m_B v_B$ 保持常數。</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // --- PHYSICS ENGINE & STATE VARIABLES ---
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Simulation State
+        let isRunning = true;
+        let mode = 'push'; // 'push', 'spring', 'collide'
+        let dt = 0.016; // Time step (seconds)
+
+        // Physics Parameters
+        let params = {
+            ma: 2.0,
+            mb: 5.0,
+            dynamicVal: 100, // Force (N) in Push, Stiffness (N/m) in Spring, Init Speed (m/s) in Collide
+            friction: 0.05,
+            restitution: 0.90,
+            g: 9.8
+        };
+
+        // Rigid Bodies
+        let bodyA = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            ax: 0, ay: 0,
+            m: 2.0,
+            radius: 30,
+            color: '#ef4444',
+            force: 0
+        };
+
+        let bodyB = {
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            ax: 0, ay: 0,
+            m: 5.0,
+            radius: 40,
+            color: '#3b82f6',
+            force: 0
+        };
+
+        // Spring State (for Spring Mode)
+        let spring = {
+            restLength: 120,
+            compressedLength: 50,
+            isCompressed: false,
+            isReleased: false,
+            k: 100
+        };
+
+        // Active push force duration tracker
+        let pushTimer = 0;
+        let maxPushTime = 0.3; // Applied for 0.3 seconds
+
+        // --- CANVAS RESIZE & INITIALIZATION ---
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height - 4; // micro offset
+            resetSimulation();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- PHYSICS CALCULATION (EULER INTEGRATION) ---
+        function stepPhysics() {
+            if (!isRunning) return;
+
+            // Reset instantaneous contact forces
+            bodyA.force = 0;
+            bodyB.force = 0;
+
+            let fA = 0; // Force on A from B
+            let fB = 0; // Force on B from A
+
+            // 1. MODE 1: PUSH / REPULSION MODE
+            if (mode === 'push') {
+                if (pushTimer > 0) {
+                    pushTimer -= dt;
+                    // Force pushing them apart
+                    const fPush = params.dynamicVal;
+                    fA = -fPush; // A is pushed left
+                    fB = fPush;  // B is pushed right
+                    if (pushTimer <= 0) pushTimer = 0;
+                }
+            } 
+            // 2. MODE 2: SPRING LAUNCH MODE
+            else if (mode === 'spring') {
+                const dist = Math.abs(bodyB.x - bodyA.x);
+                // If spring is connected / touching during release phase
+                if (spring.isReleased && dist < spring.restLength) {
+                    const deltaX = spring.restLength - dist;
+                    const fSpring = spring.k * deltaX; // Hooke's Law: F = k * x
+                    fA = -fSpring; // Push A Left
+                    fB = fSpring;  // Push B Right
+                }
+            } 
+            // 3. MODE 3: COLLISION MODE
+            else if (mode === 'collide') {
+                const minDist = bodyA.radius + bodyB.radius;
+                const currentDist = bodyB.x - bodyA.x;
+
+                // Detect overlap / collision
+                if (currentDist < minDist) {
+                    // Position correction to prevent overlap clipping
+                    const overlap = minDist - currentDist;
+                    bodyA.x -= overlap * (bodyB.m / (bodyA.m + bodyB.m));
+                    bodyB.x += overlap * (bodyA.m / (bodyA.m + bodyB.m));
+
+                    // Velocity in 1D impulse-based collision satisfying restitution e
+                    const v1 = bodyA.vx;
+                    const v2 = bodyB.vx;
+                    const e = params.restitution;
+
+                    // Impulse computation: J = -(1+e)*(v1 - v2) / (1/m1 + 1/m2)
+                    const impulse = -(1 + e) * (v1 - v2) / ((1 / bodyA.m) + (1 / bodyB.m));
+
+                    // Instantaneous force approximation for display (F_avg = J / dt)
+                    const approxForce = Math.abs(impulse / dt);
+                    fA = -approxForce;
+                    fB = approxForce;
+
+                    // Apply velocity changes
+                    bodyA.vx += impulse / bodyA.m;
+                    bodyB.vx -= impulse / bodyB.m;
+                }
+            }
+
+            // Assign for UI display
+            bodyA.force = fA;
+            bodyB.force = fB;
+
+            // Compute Net Forces including Friction
+            // Friction force: f_k = mu * m * g (opposes velocity)
+            const frictionA = -Math.sign(bodyA.vx) * Math.min(Math.abs(bodyA.vx / dt * bodyA.m), params.friction * bodyA.m * params.g);
+            const frictionB = -Math.sign(bodyB.vx) * Math.min(Math.abs(bodyB.vx / dt * bodyB.m), params.friction * bodyB.m * params.g);
+
+            const netForceA = fA + frictionA;
+            const netForceB = fB + frictionB;
+
+            // Euler Integration: a = F_net / m
+            bodyA.ax = netForceA / bodyA.m;
+            bodyB.ax = netForceB / bodyB.m;
+
+            // Update Velocity: v += a * dt
+            bodyA.vx += bodyA.ax * dt;
+            bodyB.vx += bodyB.ax * dt;
+
+            // Stop threshold for friction resting
+            if (Math.abs(bodyA.vx) < 0.001 && Math.abs(netForceA) < 0.1) bodyA.vx = 0;
+            if (Math.abs(bodyB.vx) < 0.001 && Math.abs(netForceB) < 0.1) bodyB.vx = 0;
+
+            // Update Position: x += v * dt
+            bodyA.x += bodyA.vx * dt * 80; // Scale 80px = 1 meter
+            bodyB.x += bodyB.vx * dt * 80;
+
+            // Wall Collisions Boundary Guard
+            const groundY = canvas.height * 0.65;
+            if (bodyA.x - bodyA.radius < 40) {
+                bodyA.x = 40 + bodyA.radius;
+                bodyA.vx = -bodyA.vx * 0.5;
+            }
+            if (bodyB.x + bodyB.radius > canvas.width - 40) {
+                bodyB.x = canvas.width - 40 - bodyB.radius;
+                bodyB.vx = -bodyB.vx * 0.5;
+            }
+        }
+
+        // --- DRAWING AND RENDERING ---
+        function drawArrow(x, y, length, color, label) {
+            if (Math.abs(length) < 2) return; // Don't draw tiny vectors
+            
+            ctx.save();
+            ctx.beginPath();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+
+            const headLen = 10;
+            const endX = x + length;
+
+            // Main shaft
+            ctx.moveTo(x, y);
+            ctx.lineTo(endX, y);
+            ctx.stroke();
+
+            // Arrow head
+            const direction = Math.sign(length);
+            ctx.beginPath();
+            ctx.moveTo(endX, y);
+            ctx.lineTo(endX - headLen * direction, y - 6);
+            ctx.lineTo(endX - headLen * direction, y + 6);
+            ctx.closePath();
+            ctx.fill();
+
+            // Text Label
+            if (label) {
+                ctx.font = 'bold 12px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(label, x + length / 2, y - 10);
+            }
+            ctx.restore();
+        }
+
+        function drawSpring(x1, x2, y, coils = 12) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#94a3b8';
+
+            const width = x2 - x1;
+            const step = width / coils;
+
+            ctx.moveTo(x1, y);
+            for (let i = 1; i < coils; i++) {
+                const px = x1 + i * step;
+                const py = y + (i % 2 === 0 ? -12 : 12);
+                ctx.lineTo(px, py);
+            }
+            ctx.lineTo(x2, y);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const centerY = canvas.height * 0.65;
+
+            // 1. Draw Track / Ground
+            ctx.save();
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(20, centerY + 30, canvas.width - 40, 10);
+            
+            // Ground Hatch Lines
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            for (let x = 30; x < canvas.width - 30; x += 20) {
+                ctx.beginPath();
+                ctx.moveTo(x, centerY + 40);
+                ctx.lineTo(x - 10, centerY + 52);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 2. Draw Spring in Spring Mode
+            if (mode === 'spring') {
+                const leftTouch = bodyA.x + bodyA.radius;
+                const rightTouch = bodyB.x - bodyB.radius;
+                
+                if (rightTouch - leftTouch <= spring.restLength || spring.isCompressed) {
+                    drawSpring(leftTouch, rightTouch, centerY);
+                }
+            }
+
+            // 3. Draw Bodies (A and B)
+            // Body A
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(bodyA.x, centerY, bodyA.radius, 0, Math.PI * 2);
+            ctx.fillStyle = bodyA.color;
+            ctx.shadowColor = 'rgba(239, 68, 68, 0.4)';
+            ctx.shadowBlur = 15;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#fca5a5';
+            ctx.stroke();
+
+            // Text Label A
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`A (${bodyA.m}kg)`, bodyA.x, centerY);
+            ctx.restore();
+
+            // Body B
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(bodyB.x, centerY, bodyB.radius, 0, Math.PI * 2);
+            ctx.fillStyle = bodyB.color;
+            ctx.shadowColor = 'rgba(59, 130, 246, 0.4)';
+            ctx.shadowBlur = 15;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#93c5fd';
+            ctx.stroke();
+
+            // Text Label B
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`B (${bodyB.m}kg)`, bodyB.x, centerY);
+            ctx.restore();
+
+            // 4. Draw Vector Arrows (Force & Velocity)
+            const arrowScale = 0.8; // pixels per Newton/velocity unit
+            
+            // Force Vector A (FA)
+            if (Math.abs(bodyA.force) > 0.1) {
+                drawArrow(bodyA.x, centerY - bodyA.radius - 20, bodyA.force * arrowScale, '#ef4444', `FA = ${bodyA.force.toFixed(1)} N`);
+            }
+            // Force Vector B (FB)
+            if (Math.abs(bodyB.force) > 0.1) {
+                drawArrow(bodyB.x, centerY - bodyB.radius - 20, bodyB.force * arrowScale, '#3b82f6', `FB = ${bodyB.force.toFixed(1)} N`);
+            }
+
+            // Velocity Vector A
+            if (Math.abs(bodyA.vx) > 0.05) {
+                drawArrow(bodyA.x, centerY + bodyA.radius + 20, bodyA.vx * 25, '#10b981', `vA = ${bodyA.vx.toFixed(2)} m/s`);
+            }
+            // Velocity Vector B
+            if (Math.abs(bodyB.vx) > 0.05) {
+                drawArrow(bodyB.x, centerY + bodyB.radius + 20, bodyB.vx * 25, '#10b981', `vB = ${bodyB.vx.toFixed(2)} m/s`);
+            }
+        }
+
+        // --- TELEMETRY & UI UPDATES ---
+        function updateTelemetry() {
+            document.getElementById('telemetry-fa').innerText = `${bodyA.force.toFixed(1)} N`;
+            document.getElementById('telemetry-fb').innerText = `${bodyB.force.toFixed(1)} N`;
+            document.getElementById('telemetry-va').innerText = `${bodyA.vx.toFixed(2)} m/s`;
+            document.getElementById('telemetry-vb').innerText = `${bodyB.vx.toFixed(2)} m/s`;
+
+            // Calculate total momentum P = m1*v1 + m2*v2
+            const pTotal = (bodyA.m * bodyA.vx) + (bodyB.m * bodyB.vx);
+            document.getElementById('telemetry-ptotal').innerText = `${pTotal.toFixed(2)} kg·m/s`;
+        }
+
+        function updateParams() {
+            params.ma = parseFloat(document.getElementById('slider-ma').value);
+            params.mb = parseFloat(document.getElementById('slider-mb').value);
+            params.dynamicVal = parseFloat(document.getElementById('slider-dynamic-param').value);
+            params.friction = parseFloat(document.getElementById('slider-friction').value);
+            params.restitution = parseFloat(document.getElementById('slider-restitution').value);
+
+            document.getElementById('val-ma').innerText = `${params.ma.toFixed(1)} kg`;
+            document.getElementById('val-mb').innerText = `${params.mb.toFixed(1)} kg`;
+            document.getElementById('val-friction').innerText = params.friction.toFixed(2);
+            document.getElementById('val-restitution').innerText = params.restitution.toFixed(2);
+
+            bodyA.m = params.ma;
+            bodyB.m = params.mb;
+
+            // Radius scales dynamically with mass
+            bodyA.radius = 22 + Math.cbrt(bodyA.m) * 8;
+            bodyB.radius = 22 + Math.cbrt(bodyB.m) * 8;
+
+            if (mode === 'push') {
+                document.getElementById('val-dynamic-param').innerText = `${params.dynamicVal} N`;
+            } else if (mode === 'spring') {
+                document.getElementById('val-dynamic-param').innerText = `${params.dynamicVal} N/m`;
+                spring.k = params.dynamicVal;
+            } else if (mode === 'collide') {
+                document.getElementById('val-dynamic-param').innerText = `${params.dynamicVal} m/s`;
+            }
+        }
+
+        // --- MODE CONTROL & ACTIONS ---
+        function setMode(newMode) {
+            mode = newMode;
+
+            // Update UI tab styles
+            const btnPush = document.getElementById('mode-push');
+            const btnSpring = document.getElementById('mode-spring');
+            const btnCollide = document.getElementById('mode-collide');
+
+            const activeClass = "px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-all duration-200 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 whitespace-nowrap";
+            const inactiveClass = "px-4 py-2 text-xs md:text-sm font-medium rounded-lg text-slate-400 hover:text-slate-200 transition-all duration-200 whitespace-nowrap";
+
+            btnPush.className = mode === 'push' ? activeClass : inactiveClass;
+            btnSpring.className = mode === 'spring' ? activeClass : inactiveClass;
+            btnCollide.className = mode === 'collide' ? activeClass : inactiveClass;
+
+            const dynamicBox = document.getElementById('dynamic-param-box');
+            const restitutionBox = document.getElementById('restitution-box');
+            const actionBtn = document.getElementById('btn-action');
+            const sliderDynamic = document.getElementById('slider-dynamic-param');
+
+            if (mode === 'push') {
+                document.getElementById('lbl-dynamic-param').innerText = '相互作用推力 (F_push)';
+                sliderDynamic.min = 10; sliderDynamic.max = 300; sliderDynamic.step = 5; sliderDynamic.value = 100;
+                restitutionBox.style.display = 'none';
+                actionBtn.innerText = '🚀 觸發相互推力 (FA = -FB)';
+            } else if (mode === 'spring') {
+                document.getElementById('lbl-dynamic-param').innerText = '彈簧彈性係數 (k)';
+                sliderDynamic.min = 20; sliderDynamic.max = 300; sliderDynamic.step = 5; sliderDynamic.value = 120;
+                restitutionBox.style.display = 'none';
+                actionBtn.innerText = '🧲 壓縮 / 釋放彈簧';
+            } else if (mode === 'collide') {
+                document.getElementById('lbl-dynamic-param').innerText = '物體 A 初速度 (v0)';
+                sliderDynamic.min = 1; sliderDynamic.max = 8; sliderDynamic.step = 0.5; sliderDynamic.value = 4;
+                restitutionBox.style.display = 'block';
+                actionBtn.innerText = '💥 發射物體 A 進行碰撞';
+            }
+
+            updateParams();
+            resetSimulation();
+        }
+
+        function triggerAction() {
+            if (mode === 'push') {
+                pushTimer = maxPushTime;
+            } else if (mode === 'spring') {
+                if (!spring.isCompressed && !spring.isReleased) {
+                    // Compress
+                    spring.isCompressed = true;
+                    spring.isReleased = false;
+                    const center = (bodyA.x + bodyB.x) / 2;
+                    bodyA.x = center - spring.compressedLength / 2 - bodyA.radius;
+                    bodyB.x = center + spring.compressedLength / 2 + bodyB.radius;
+                    document.getElementById('btn-action').innerText = '🚀 釋放彈簧！';
+                } else {
+                    // Release
+                    spring.isCompressed = false;
+                    spring.isReleased = true;
+                    document.getElementById('btn-action').innerText = '🧲 重新壓縮彈簧';
+                }
+            } else if (mode === 'collide') {
+                resetSimulation();
+                bodyA.vx = params.dynamicVal;
+            }
+        }
+
+        function resetSimulation() {
+            const centerX = canvas.width / 2;
+            bodyA.vx = 0; bodyA.vy = 0; bodyA.ax = 0; bodyA.ay = 0; bodyA.force = 0;
+            bodyB.vx = 0; bodyB.vy = 0; bodyB.ax = 0; bodyB.ay = 0; bodyB.force = 0;
+
+            pushTimer = 0;
+            spring.isCompressed = false;
+            spring.isReleased = false;
+
+            if (mode === 'push') {
+                bodyA.x = centerX - bodyA.radius - 2;
+                bodyB.x = centerX + bodyB.radius + 2;
+                document.getElementById('btn-action').innerText = '🚀 觸發相互推力 (FA = -FB)';
+            } else if (mode === 'spring') {
+                bodyA.x = centerX - spring.restLength / 2 - bodyA.radius;
+                bodyB.x = centerX + spring.restLength / 2 + bodyB.radius;
+                document.getElementById('btn-action').innerText = '🧲 壓縮彈簧';
+            } else if (mode === 'collide') {
+                bodyA.x = 80;
+                bodyB.x = centerX + 50;
+                document.getElementById('btn-action').innerText = '💥 發射物體 A 進行碰撞';
+            }
+        }
+
+        function togglePause() {
+            isRunning = !isRunning;
+            document.getElementById('pause-icon').innerText = isRunning ? '⏸️' : '▶️';
+            document.getElementById('pause-text').innerText = isRunning ? '暫停' : '播放';
+            document.getElementById('status-text').innerText = isRunning ? '系統運行中 (Euler 積分)' : '系統已暫停';
+        }
+
+        // --- MAIN LOOP ---
+        function gameLoop() {
+            stepPhysics();
+            render();
+            updateTelemetry();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = function () {
+            resizeCanvas();
+            setMode('push');
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
